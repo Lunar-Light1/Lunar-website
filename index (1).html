@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lunar Light • Ilya</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap');
+    
+    :root {
+      --bg: #06060c;
+      --card: rgba(15, 15, 28, 0.75);
+      --accent: #7b00ff;
+      --accent-glow: rgba(123, 0, 255, 0.4);
+      --text: #ffffff;
+      --text-muted: #8e8ea0;
+      --border: rgba(123, 0, 255, 0.2);
+    }
+    
+    [data-theme="light"] {
+      --bg: #f5f5fa;
+      --card: rgba(255, 255, 255, 0.85);
+      --accent: #6200ea;
+      --accent-glow: rgba(98, 0, 234, 0.2);
+      --text: #0f0f1a;
+      --text-muted: #65657b;
+      --border: rgba(98, 0, 234, 0.15);
+    }
+
+    /* Тема Кровавой Луны (Пасхалка) */
+    [data-theme="crimson"] {
+      --bg: #0f0202;
+      --card: rgba(28, 12, 12, 0.8);
+      --accent: #ff003c;
+      --accent-glow: rgba(255, 0, 60, 0.5);
+      --text: #fff0f2;
+      --text-muted: #a08e91;
+      --border: rgba(255, 0, 60, 0.3);
+    }
+
+    * {
+      box-sizing: border-box;
+      transition: background 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ЭФФЕКТ ЗАТМЕНИЯ (ECLIPSE) */
+    #eclipse-overlay {
+      position: fixed;
+      top:0; left:0; width:100%; height:100%;
+      background: #000;
+      opacity: 0;
+      visibility: hidden;
+      z-index: 9998;
+      transition: opacity 0.4s ease;
+    }
+    #eclipse-overlay.active {
+      visibility: visible;
+      opacity: 1;
+    }
+    #eclipse-flash {
+      position: fixed;
+      top:0; left:0; width:100%; height:100%;
+      background: #fff;
+      opacity: 0;
+      visibility: hidden;
+      z-index: 9999;
+    }
+
+    /* АНИМАЦИЯ ЗАГРУЗКИ */
+    #loader {
+      position: fixed; 
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: #06060c; 
+      display: flex; 
+      flex-direction: column;
+      justify-content: center; 
+      align-items: center; 
+      z-index: 10000; 
+      transition: opacity 0.5s ease, visibility 0.5s ease;
+      gap: 20px;
+    }
+    .loader-text {
+      font-size: 38px; 
+      font-weight: 700; 
+      letter-spacing: 10px;
+      color: #b388ff; 
+      text-shadow: 0 0 25px var(--accent);
+      display: flex; 
+      padding-left: 10px;
+    }
+    .letter { 
+      opacity: 0; 
+      animation: letterFadeIn 0.5s cubic-bezier(0.11, 0, 0.5, 0) forwards; 
+    }
+    @keyframes letterFadeIn { to { opacity: 1; transform: scale(1.05); } }
+
+    .progress-container {
+      width: 160px; height: 3px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 10px; overflow: hidden; position: relative;
+    }
+    .progress-bar {
+      width: 0%; height: 100%;
+      background: linear-gradient(90deg, var(--accent), #b388ff);
+      box-shadow: 0 0 12px #b388ff, 0 0 4px var(--accent);
+      border-radius: 10px;
+      animation: loadProgress 1.4s cubic-bezier(0.42, 0, 0.58, 1) forwards;
+    }
+    @keyframes loadProgress {
+      0% { width: 0%; }
+      50% { width: 45%; }
+      70% { width: 75%; }
+      100% { width: 100%; }
+    }
+
+    /* Звёздный фон */
+    .stars { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 1; pointer-events: none; }
+    .star { position: absolute; border-radius: 50%; animation: fall linear infinite; }
+    @keyframes fall {
+      0% { transform: translateY(-20px); opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 1; }
+      100% { transform: translateY(105vh); opacity: 0; }
+    }
+
+    /* Настройки */
+    .controls { position: fixed; top: 20px; right: 20px; z-index: 100; display: flex; gap: 10px; }
+    .control-btn {
+      background: var(--card); border: 1px solid var(--border);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      color: var(--text); width: 44px; height: 44px; border-radius: 50%;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      font-size: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    .control-btn:hover { border-color: var(--accent); transform: scale(1.05); }
+
+    /* Оболочка */
+    .wrapper { width: 100%; max-width: 440px; padding: 40px 20px; position: relative; z-index: 2; }
+
+    /* Профиль */
+    .profile-card { text-align: center; margin-bottom: 25px; }
+    .avatar { 
+      width: 110px; height: 110px; border-radius: 50%; 
+      border: 3px solid var(--accent); margin: 0 auto 15px; 
+      box-shadow: 0 0 25px var(--accent-glow); object-fit: cover; 
+      cursor: pointer;
+    }
+    .avatar:active { transform: scale(0.95); }
+    h1 { font-size: 24px; margin: 0 0 5px; font-weight: 700; letter-spacing: -0.5px; }
+    
+    /* Интерактивный юзернейм */
+    .username { 
+      display: inline-block; color: var(--text-muted); margin: 0; 
+      font-size: 14px; font-weight: 500; cursor: pointer;
+      padding: 4px 10px; border-radius: 8px; transition: all 0.2s;
+    }
+    .username:hover { background: rgba(123, 0, 255, 0.1); color: var(--text); }
+
+    /* Полоса Энергии Луны */
+    .energy-container {
+      width: 100%; height: 5px; background: rgba(255,255,255,0.05);
+      border-radius: 10px; margin-top: 15px; position: relative; overflow: hidden;
+    }
+    .energy-fill {
+      width: 0%; height: 100%; background: linear-gradient(90deg, var(--accent), #ff00eb);
+      box-shadow: 0 0 10px var(--accent-glow); transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Экраны */
+    .screen { display: none; opacity: 0; transform: translateY(15px); animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .screen.active { display: block; }
+    @keyframes slideUp { to { opacity: 1; transform: translateY(0); } }
+
+    /* Карточки */
+    .card {
+      background: var(--card); border-radius: 24px; padding: 24px;
+      border: 1px solid var(--border); backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+    }
+    .card h2 { margin: 0 0 20px 0; font-size: 20px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+
+    /* Таблицы Био */
+    .bio-list { margin: 0; padding: 0; list-style: none; }
+    .bio-list li { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(123, 0, 255, 0.1); font-size: 15px; }
+    .bio-list li:last-child { border: none; }
+    .bio-list span.label { color: var(--text-muted); }
+    .bio-list span.value { font-weight: 600; text-align: right; }
+
+    /* Услуги */
+    .price-item { background: rgba(123, 0, 255, 0.04); border: 1px solid rgba(123, 0, 255, 0.1); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+    .price-item:last-of-type { margin-bottom: 20px; }
+    .price-item h3 { margin: 0 0 5px 0; font-size: 15px; font-weight: 600; }
+    .price-item p { margin: 0; font-size: 13px; color: var(--text-muted); }
+
+    /* Кнопки */
+    .navigation-menu { display: flex; flex-direction: column; gap: 12px; }
+    .btn {
+      display: flex; align-items: center; justify-content: center; width: 100%; padding: 16px;
+      background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+      color: var(--text); text-decoration: none; font-weight: 600; font-size: 15px; cursor: pointer;
+    }
+    .btn:hover {
+      border-color: var(--accent);
+      background: linear-gradient(145deg, rgba(123, 0, 255, 0.15), rgba(123, 0, 255, 0.02));
+      transform: translateY(-2px); box-shadow: 0 8px 20px var(--accent-glow);
+    }
+    .btn-main { border-color: var(--accent); background: rgba(123, 0, 255, 0.05); }
+    .btn-back { margin-top: 16px; background: transparent; border-color: transparent; color: var(--text-muted); font-weight: 500; }
+    .btn-back:hover { background: rgba(250,250,250,0.05); color: var(--text); box-shadow: none; }
+
+    /* Статистика */
+    .stats-card { margin-top: 20px; display: flex; flex-direction: column; gap: 15px; text-align: center; }
+    .views-counter { font-size: 13px; color: var(--text-muted); font-weight: 500; letter-spacing: 0.5px; }
+    .reactions-container { display: flex; justify-content: center; gap: 12px; }
+    .reaction-btn {
+      background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border);
+      padding: 10px 16px; border-radius: 20px; cursor: pointer; color: var(--text);
+      font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 6px;
+    }
+    .reaction-btn:hover { border-color: var(--accent); background: rgba(123, 0, 255, 0.1); transform: scale(1.05); }
+    .reaction-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 0 15px var(--accent-glow); }
+
+    /* СИСТЕМА УВЕДОМЛЕНИЙ (TOASTS) */
+    #toast-container {
+      position: fixed; bottom: 25px; left: 50%; transform: translateX(-50%);
+      z-index: 10001; display: flex; flex-direction: column; gap: 10px;
+      width: calc(100% - 40px); max-width: 350px; pointer-events: none;
+    }
+    .toast {
+      background: rgba(10, 10, 20, 0.9); border: 1px solid var(--accent);
+      color: #fff; border-radius: 12px; padding: 12px 16px; font-size: 13px;
+      font-family: 'Fira Code', monospace; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      display: flex; align-items: center; gap: 10px;
+      opacity: 0; transform: translateY(20px);
+      animation: toastIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+    @keyframes toastIn { to { opacity: 1; transform: translateY(0); } }
+    .toast.hide { animation: toastOut 0.3s ease forwards; }
+    @keyframes toastOut { to { opacity: 0; transform: translateY(-15px) scale(0.9); } }
+    .toast-icon { color: var(--accent); font-weight: bold; }
+  </style>
+</head>
+<body data-theme="dark" data-lang="ru">
+
+  <div id="eclipse-overlay"></div>
+  <div id="eclipse-flash"></div>
+
+  <div id="toast-container"></div>
+
+  <div id="loader">
+    <div class="loader-text">
+      <span class="letter" style="animation-delay: 0.05s;">𝙇</span>
+      <span class="letter" style="animation-delay: 0.15s;">𝙐</span>
+      <span class="letter" style="animation-delay: 0.25s;">𝙉</span>
+      <span class="letter" style="animation-delay: 0.35s;">𝘼</span>
+      <span class="letter" style="animation-delay: 0.45s;">𝙍</span>
+    </div>
+    <div class="progress-container">
+      <div class="progress-bar"></div>
+    </div>
+  </div>
+
+  <div class="stars" id="stars"></div>
+
+  <div class="controls">
+    <button class="control-btn" onclick="toggleTheme()">🌗</button>
+    <button class="control-btn" onclick="toggleLang()">🌐</button>
+  </div>
+
+  <div class="wrapper">
+    
+    <div class="profile-card">
+      <img src="https://x0.at/waGb.jpg" alt="Avatar" class="avatar" onclick="triggerConstellation()">
+      <h1>Ilya • Lunar Light</h1>
+      <p class="username" id="clickable-username" onclick="copyUsername()">@heroku_guard</p>
+      
+      <div class="energy-container">
+        <div class="energy-fill" id="energy-bar"></div>
+      </div>
+    </div>
+
+    <div id="main-screen" class="screen active">
+      <div class="navigation-menu">
+        <button class="btn btn-main" onclick="navigateTo('bio-screen')">
+          <span class="lang-ru">👤 Обо мне</span>
+          <span class="lang-en" style="display:none;">👤 Biography</span>
+        </button>
+        <button class="btn btn-main" onclick="navigateTo('shop-screen')">
+          <span class="lang-ru">🛍 Услуги и Цены</span>
+          <span class="lang-en" style="display:none;">🛍 Shop & Services</span>
+        </button>
+        <button class="btn btn-main" onclick="navigateTo('links-screen')">
+          <span class="lang-ru">🔗 Мои ссылки</span>
+          <span class="lang-en" style="display:none;">🔗 Social Links</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="bio-screen" class="screen">
+      <div class="card">
+        <h2 class="lang-ru">👤 Биография</h2>
+        <h2 class="lang-en" style="display:none;">👤 Biography</h2>
+        
+        <ul class="bio-list lang-ru">
+          <li><span class="label">🌕 Имя</span><span class="value">Илья</span></li>
+          <li><span class="label">🌙 Возраст</span><span class="value">17 лет</span></li>
+          <li><span class="label">💬 Контакты</span><span class="value">heroku_guard.t.me</span></li>
+          <li><span class="label">💳 Языки</span><span class="value">Русский</span></li>
+          <li><span class="label">🌕 Юзербот</span><span class="value">Heroku</span></li>
+          <li><span class="label">😈 День рождения</span><span class="value">26.10.2009</span></li>
+        </ul>
+
+        <ul class="bio-list lang-en" style="display:none;">
+          <li><span class="label">🌕 Name</span><span class="value">Ilya</span></li>
+          <li><span class="label">🌙 Age</span><span class="value">17 Years</span></li>
+          <li><span class="label">💬 Username</span><span class="value">heroku_guard.t.me</span></li>
+          <li><span class="label">💳 Languages</span><span class="value">Russian</span></li>
+          <li><span class="label">🌕 Userbot</span><span class="value">Heroku</span></li>
+          <li><span class="label">😈 Birthday</span><span class="value">10.26.2009</span></li>
+        </ul>
+      </div>
+      <button class="btn btn-back" onclick="navigateTo('main-screen')">← Назад / Back</button>
+    </div>
+
+    <div id="shop-screen" class="screen">
+      <div class="card">
+        <h2 class="lang-ru">🛍 Цены и Услуги</h2>
+        <h2 class="lang-en" style="display:none;">🛍 Price & Shop</h2>
+        
+        <div class="lang-ru">
+          <div class="price-item">
+            <h3>🌐 Кастомные языки для Telegram</h3>
+            <p>Цена: 100 ⭐️ или по договору</p>
+          </div>
+          <div class="price-item">
+            <h3>🌕 Модули Userbot (Hikka/Heroku)</h3>
+            <p>Цена: зависит от сложности ТЗ</p>
+          </div>
+          <a href="https://t.me/heroku_guard" class="btn" target="_blank">💬 Связаться со мной</a>
+        </div>
+
+        <div class="lang-en" style="display:none;">
+          <div class="price-item">
+            <h3>🌐 Custom Languages for Telegram</h3>
+            <p>Price: 100 ⭐ or by agreement</p>
+          </div>
+          <div class="price-item">
+            <h3>🌕 Userbot Modules (Hikka/Heroku)</h3>
+            <p>Price: depends on complexity</p>
+          </div>
+          <a href="https://t.me/heroku_guard" class="btn" target="_blank">💬 Contact Me</a>
+        </div>
+      </div>
+      <button class="btn btn-back" onclick="navigateTo('main-screen')">← Назад / Back</button>
+    </div>
+
+    <div id="links-screen" class="screen">
+      <div class="card">
+        <h2 class="lang-ru">🔗 Мои ссылки</h2>
+        <h2 class="lang-en" style="display:none;">🔗 My Links</h2>
+        
+        <div class="navigation-menu">
+          <a href="https://t.me/Heroku_Guard_feedback_bot" class="btn" target="_blank">🤖 Обратная связь</a>
+          <a href="https://t.me/nutbet_bot" class="btn" target="_blank">🎲 Мой бот — @nutbet_bot</a>
+          <a href="https://t.me/Larimar_Waves" class="btn" target="_blank">💬 Мой чат</a>
+          <a href="https://t.me/Larimar_Waves_TGK" class="btn" target="_blank">📢 Мой канал</a>
+        </div>
+      </div>
+      <button class="btn btn-back" onclick="navigateTo('main-screen')">← Назад / Back</button>
+    </div>
+
+    <div class="card stats-card">
+      <div class="views-counter">
+        <span class="lang-ru">👁 Просмотров профиля: <span id="view-count">0</span></span>
+        <span class="lang-en" style="display:none;">👁 Profile views: <span id="view-count-en">0</span></span>
+      </div>
+      <div class="reactions-container">
+        <button class="reaction-btn" onclick="handleReaction('heart')">❤️ <span id="count-heart">0</span></button>
+        <button class="reaction-btn" onclick="handleReaction('fire')">🔥 <span id="count-fire">0</span></button>
+        <button class="reaction-btn" onclick="handleReaction('star')">⭐ <span id="count-star">0</span></button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    let avatarClicks = 0;
+    let energy = 0;
+
+    // Кастомный Toast логгер (в стиле логов Heroku юзербота)
+    function showToast(message) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.innerHTML = `<span class="toast-icon">[SYSTEM]:</span> <span>${message}</span>`;
+      
+      container.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.classList.add('hide');
+        setTimeout(() => toast.remove(), 300);
+      }, 2500);
+    }
+
+    // Интерактивное копирование юзернейма
+    function copyUsername() {
+      const usernameEl = document.getElementById('clickable-username');
+      const originalText = "@heroku_guard";
+      
+      navigator.clipboard.writeText(originalText).then(() => {
+        usernameEl.innerText = "Copied!";
+        usernameEl.style.color = "var(--accent)";
+        
+        const isRu = document.body.dataset.lang === 'ru';
+        showToast(isRu ? "Юзернейм скопирован в буфер обмена" : "Username copied to clipboard");
+        
+        setTimeout(() => {
+          usernameEl.innerText = originalText;
+          usernameEl.style.color = "";
+        }, 1000);
+      });
+    }
+
+    // Пасхалка: Кровавая луна (3 клика по аватару)
+    function triggerConstellation() {
+      avatarClicks++;
+      const isRu = document.body.dataset.lang === 'ru';
+      
+      if (avatarClicks === 1) {
+        showToast(isRu ? "Констелляция нестабильна..." : "Constellation is unstable...");
+      }
+      
+      if (avatarClicks >= 3) {
+        const body = document.body;
+        if (body.dataset.theme !== 'crimson') {
+          body.dataset.theme = 'crimson';
+          showToast(isRu ? "АКТИВИРОВАНО: Crimson Moon Effect" : "ACTIVATED: Crimson Moon Effect");
+        } else {
+          body.dataset.theme = 'dark';
+          showToast(isRu ? "РЕЖИМ: Стандартная орбита" : "MODE: Default Orbit");
+        }
+        avatarClicks = 0;
+        const container = document.getElementById('stars');
+        container.innerHTML = '';
+        createStars();
+      }
+    }
+
+    // Геймификация энергии Луны + Эффект Затмения (Eclipse)
+    function addEnergy() {
+      energy += 10;
+      if (energy > 100) energy = 100;
+      
+      document.getElementById('energy-bar').style.width = `${energy}%`;
+      
+      if (energy === 100) {
+        triggerEclipse();
+      }
+    }
+
+    function triggerEclipse() {
+      const isRu = document.body.dataset.lang === 'ru';
+      showToast(isRu ? "ВНИМАНИЕ: Энергия Луны пиковая! Коллапс..." : "WARNING: Lunar Energy Peak! Collapse...");
+      
+      const overlay = document.getElementById('eclipse-overlay');
+      const flash = document.getElementById('eclipse-flash');
+      
+      setTimeout(() => {
+        overlay.classList.add('active'); // Экран темнеет
+        
+        setTimeout(() => {
+          flash.style.visibility = 'visible';
+          flash.style.opacity = '1'; // Вспышка света
+          
+          setTimeout(() => {
+            // Сброс параметров
+            overlay.classList.remove('active');
+            flash.style.opacity = '0';
+            setTimeout(() => flash.style.visibility = 'hidden', 300);
+            
+            energy = 0;
+            document.getElementById('energy-bar').style.width = '0%';
+            showToast(isRu ? "СОСТОЯНИЕ: Полное солнечное затмение пройдено" : "STATE: Total Eclipse complete");
+          }, 150);
+        }, 1000);
+      }, 500);
+    }
+
+    // Маршрутизатор экранов
+    function navigateTo(screenId) {
+      const currentActive = document.querySelector('.screen.active');
+      if (currentActive) {
+        currentActive.style.opacity = '0';
+        currentActive.style.transform = 'translateY(-10px)';
+        setTimeout(() => {
+          currentActive.classList.remove('active');
+          const nextScreen = document.getElementById(screenId);
+          nextScreen.classList.add('active');
+          nextScreen.style.opacity = '';
+          nextScreen.style.transform = '';
+        }, 200);
+      }
+    }
+
+    // Генерация плывущих звезд
+    function createStars() {
+      const container = document.getElementById('stars');
+      const starCount = 140; 
+      const currentTheme = document.body.dataset.theme;
+      
+      for (let i = 0; i < starCount; i++) {
+        const star = document.createElement('div');
+        star.className = 'star';
+        
+        const size = Math.random() * 3.2 + 0.8; 
+        const duration = Math.random() * 8 + 4;
+        const delay = Math.random() * -12; 
+
+        star.style.width = `${size}px`;
+        star.style.height = `${size}px`;
+        star.style.left = `${Math.random() * 100}%`;
+        star.style.top = `${Math.random() * 100}%`;
+        star.style.animationDuration = `${duration}s`;
+        star.style.animationDelay = `${delay}s`;
+        
+        if (currentTheme === 'light') {
+          star.style.background = 'rgba(98, 0, 234, 0.4)';
+        } else if (currentTheme === 'crimson') {
+          star.style.background = '#ff4d6d';
+          if (size > 2.2) star.style.boxShadow = '0 0 8px rgba(255,77,109,0.8)';
+        } else {
+          star.style.background = '#ffffff';
+          if (size > 2.2) star.style.boxShadow = '0 0 8px rgba(255,255,255,0.8)';
+        }
+        container.appendChild(star);
+      }
+    }
+
+    // Инициализация статистики
+    function initStats() {
+      let currentViews = parseInt(localStorage.getItem('lunar_views') || '0');
+      
+      if (!sessionStorage.getItem('lunar_session_viewed')) {
+        currentViews++;
+        localStorage.setItem('lunar_views', currentViews);
+        sessionStorage.setItem('lunar_session_viewed', 'true');
+      }
+      
+      document.getElementById('view-count').innerText = currentViews;
+      document.getElementById('view-count-en').innerText = currentViews;
+
+      const types = ['heart', 'fire', 'star'];
+      types.forEach(type => updateReactionUI(type));
+    }
+
+    function handleReaction(type) {
+      const hasReacted = localStorage.getItem(`user_reacted_${type}`) === 'true';
+      
+      if (!hasReacted) {
+        localStorage.setItem(`user_reacted_${type}`, 'true');
+        let count = parseInt(localStorage.getItem(`total_${type}`) || '0');
+        localStorage.setItem(`total_${type}`, count + 1);
+        addEnergy(); // Заряжаем Луну при клике на реакцию!
+      } else {
+        localStorage.removeItem(`user_reacted_${type}`);
+        let count = parseInt(localStorage.getItem(`total_${type}`) || '0');
+        localStorage.setItem(`total_${type}`, Math.max(0, count - 1));
+      }
+      
+      updateReactionUI(type);
+    }
+
+    function updateReactionUI(type) {
+      const total = parseInt(localStorage.getItem(`total_${type}`) || '0');
+      document.getElementById(`count-${type}`).innerText = total;
+      
+      const btn = document.querySelector(`[onclick="handleReaction('${type}')"]`);
+      if (localStorage.getItem(`user_reacted_${type}`) === 'true') {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    }
+
+    // Настройки интерфейса
+    function toggleTheme() {
+      const body = document.body;
+      body.dataset.theme = body.dataset.theme === 'dark' ? 'light' : 'dark';
+      avatarClicks = 0; // сброс пасхалки
+      const container = document.getElementById('stars');
+      container.innerHTML = '';
+      createStars();
+    }
+
+    function toggleLang() {
+      const body = document.body;
+      const isRu = body.dataset.lang === 'ru';
+      body.dataset.lang = isRu ? 'en' : 'ru';
+
+      const ruElements = document.querySelectorAll('.lang-ru');
+      const enElements = document.querySelectorAll('.lang-en');
+
+      ruElements.forEach(el => el.style.display = isRu ? 'none' : 'block');
+      enElements.forEach(el => el.style.display = isRu ? 'block' : 'none');
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      createStars();
+      initStats();
+      
+      setTimeout(() => {
+        const loader = document.getElementById('loader');
+        loader.style.opacity = '0';
+        setTimeout(() => { loader.style.display = 'none'; }, 500);
+      }, 1500);
+    });
+  </script>
+</body>
+</html>
